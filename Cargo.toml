@@ -1,0 +1,15 @@
+[package]
+name = "merileva"
+version = "0.1.0"
+authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
+
+[dependencies]
+futures = "0.1"
+hyper = "0.11"
+log = "0.3"
+hyper-rustls = "0.11"
+tokio-core = "0.1"
+
+[lib]
+name = "merileva"
+crate-type = ["staticlib"]
