@@ -4,6 +4,12 @@ import PackageDescription
 
 let package = Package(
     name: "Merileva",
+    products: [
+        .executable(
+            name: "Merileva",
+            targets: ["Merileva"]
+        ),
+    ],
     dependencies: [],
     targets: [
         .target(
