@@ -1,2 +1,3 @@
 # Merileva
-Development kit for Naamio applets.
+
+Rust SDK for Naamio applets.
