@@ -9,21 +9,17 @@ mod errors;
 mod service;
 mod types;
 
-use libc::{c_uint, size_t};
+use libc::uint8_t;
 use service::NaamioService;
-use std::{mem, ptr};
 
 #[no_mangle]
-pub extern fn create_service(threads: c_uint) -> size_t {
-    let mut service = NaamioService::new(threads as usize);
-    let ptr = &mut service as *const _;
-    mem::forget(service);       // don't run destructor
-    ptr as size_t
+pub extern fn create_service(threads: uint8_t) -> *mut NaamioService {
+    let service = NaamioService::new(threads as usize);
+    let ptr = Box::new(service);
+    Box::into_raw(ptr)
 }
 
 #[no_mangle]
-pub extern fn drop_service(p: size_t) {
-    let p = p as *const NaamioService;
-    let _service = unsafe { ptr::read(p) };
-    println!("Successfully recaptured service!");
+pub extern fn drop_service(p: *mut NaamioService) {
+    let _service = unsafe { Box::from_raw(p) };
 }

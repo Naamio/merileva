@@ -38,3 +38,9 @@ impl NaamioService {
         }
     }
 }
+
+impl Drop for NaamioService {
+    fn drop(&mut self) {
+        info!("Service is being deallocated.");
+    }
+}
