@@ -1,3 +1,5 @@
+use hyper::Error as HyperError;
+use serde_json::error::Error as SerdeError;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::Error as IoError;
@@ -7,12 +9,18 @@ pub type NaamioResult<T> = Result<T, NaamioError>;
 #[derive(Debug)]
 pub enum NaamioError {
     Io(IoError),
+    Hyper(HyperError),
+    Serde(SerdeError),
+    Other(String),
 }
 
 impl Display for NaamioError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            NaamioError::Io(ref e) => write!(f, "I/O error: {}", e),
+            NaamioError::Io(ref e)      => write!(f, "I/O error: {}", e),
+            NaamioError::Hyper(ref e)   => write!(f, "Hyper error: {}", e),
+            NaamioError::Serde(ref e)   => write!(f, "Serde error: {}", e),
+            NaamioError::Other(ref e)   => write!(f, "Unknown error: {}", e),
         }
     }
 }
@@ -24,7 +32,10 @@ impl Error for NaamioError {
 
     fn cause(&self) -> Option<&Error> {
         match *self {
-            NaamioError::Io(ref e) => Some(e),
+            NaamioError::Io(ref e)      => Some(e),
+            NaamioError::Hyper(ref e)   => Some(e),
+            NaamioError::Serde(ref e)   => Some(e),
+            _ => None,
         }
     }
 }
@@ -40,3 +51,5 @@ macro_rules! impl_error {
 }
 
 impl_error!(IoError => Io);
+impl_error!(HyperError => Hyper);
+impl_error!(SerdeError => Serde);

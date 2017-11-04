@@ -1,10 +1,15 @@
 extern crate futures;
 extern crate hyper;
 extern crate hyper_rustls;
+#[macro_use] extern crate lazy_static;
 extern crate libc;
 #[macro_use] extern crate log;
+extern crate serde;
+#[macro_use] extern crate serde_derive;
+extern crate serde_json;
 extern crate tokio_core;
 
+#[macro_use] mod utils;
 mod errors;
 mod service;
 mod types;
@@ -22,4 +27,12 @@ pub extern fn create_service(threads: uint8_t) -> *mut NaamioService {
 #[no_mangle]
 pub extern fn drop_service(p: *mut NaamioService) {
     let _service = unsafe { Box::from_raw(p) };
+}
+
+#[no_mangle]
+pub extern fn register_plugin(p: *mut NaamioService,
+                              name: String,
+                              rel_url: String)
+{
+    //
 }

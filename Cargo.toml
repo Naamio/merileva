@@ -6,10 +6,14 @@ authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
 [dependencies]
 futures = "0.1"
 hyper = "0.11"
+lazy_static = "0.2"
 libc = "0.2"
 log = "0.3"
 hyper-rustls = "0.11"
 tokio-core = "0.1"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
 
 [lib]
 name = "merileva"

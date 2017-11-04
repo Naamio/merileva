@@ -10,3 +10,15 @@ pub type NaamioFuture<I> = Box<Future<Item=I, Error=NaamioError>>;
 /// A closure which takes a HTTPS client and returns a `Future`. This is
 /// how HTTPS client requests are queued in the event loop.
 pub type EventLoopRequest = Box<Fn(&HyperClient) -> NaamioFuture<()> + Send + 'static>;
+
+#[derive(Serialize)]
+pub struct RegisterRequest<'a> {
+    pub name: &'a str,
+    pub rel_url: &'a str,
+    pub endpoint: &'a str,
+}
+
+#[derive(Deserialize)]
+pub struct GenericResponse {
+    pub error: Option<String>,
+}
