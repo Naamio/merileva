@@ -17,7 +17,7 @@ impl NaamioService {
         where F: Fn(ByteArray) + Send + Sync + 'static
     {
         let data = json!(RegisterRequest { name, rel_url, endpoint });
-        info!("plugin {} (endpoint: {}, rel_url: {})", name, endpoint, rel_url);
+        info!("Incoming plugin: {} (endpoint: {}, rel_url: {})", name, endpoint, rel_url);
         let callback = Arc::new(call);
 
         let closure = Box::new(move |client: &HyperClient| {
@@ -45,6 +45,7 @@ impl NaamioService {
 
 /* Exported functions */
 
+#[no_mangle]
 pub extern fn set_naamio_host(addr: ByteArray) {
     match addr.as_str() {
         Some(s) if s.parse::<Uri>().is_ok() => {
@@ -53,7 +54,7 @@ pub extern fn set_naamio_host(addr: ByteArray) {
             // because we don't own the value.
             *NAAMIO_ADDRESS.write() = s.chars().collect::<String>();
         },
-        _ => error!("Cannot set ")
+        _ => error!("Cannot set Naamio host (Invalid data)"),
     }
 }
 

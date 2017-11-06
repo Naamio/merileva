@@ -4,7 +4,7 @@ use futures::{Future, Sink, Stream, future};
 use futures::sync::mpsc as futures_mpsc;
 use futures::sync::mpsc::Sender as FutureSender;
 use hyper::{Body, Client, Method, Request, StatusCode};
-use hyper::header::{ContentType, Headers};
+use hyper::header::{ContentLength, ContentType, Headers};
 use hyper_rustls::HttpsConnector;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -77,6 +77,7 @@ impl NaamioService {
         if let Some(object) = data {
             let res = serde_json::to_vec(&object).map(|bytes| {   // FIXME: Error?
                 debug!("Setting JSON payload");
+                request.headers_mut().set(ContentLength(bytes.len() as u64));
                 request.set_body::<Vec<u8>>(bytes.into());
             });
 
