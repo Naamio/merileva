@@ -24,6 +24,7 @@ pub struct NaamioService {
 
 impl NaamioService {
     pub fn new(threads: usize) -> NaamioService {
+        info!("Setting host as {}", &*NAAMIO_ADDRESS);
         let (tx, rx) = futures_mpsc::channel(0);
         let _ = thread::spawn(move || {
             let mut core = Core::new().expect("event loop creation");
@@ -105,6 +106,7 @@ impl NaamioService {
         Box::new(f)
     }
 
+    #[inline]
     pub fn queue_closure(&self, f: EventLoopRequest) {
         self.sender.clone().send(f).wait().map_err(|e| {
             error!("Cannot queue request in event loop: {}", e);

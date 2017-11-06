@@ -3,7 +3,7 @@ use hyper::Method;
 use libc::uint8_t;
 use service::NaamioService;
 use std::sync::Arc;
-use types::{ByteArray, HyperClient, Opaque};
+use types::{ByteArray, HyperClient};
 use types::{NaamioFuture, RegisterRequest, RegisterResponse};
 
 impl NaamioService {
@@ -17,15 +17,14 @@ impl NaamioService {
         let callback = Arc::new(call);
 
         let closure = Box::new(move |client: &HyperClient| {
+            let callback = callback.clone();
             let f = Self::request::<_, RegisterResponse>(client,
                                                          Method::Post,
                                                          "/register",
                                                          Some(data.clone()));
-            let callback = callback.clone();
             let f = f.and_then(move |resp| {
-                let callback = callback.clone();
                 if let Some(s) = resp.token.as_ref() {
-                    callback(s.as_str().into());
+                    (&callback)(s.as_str().into());
                 } else {
                     error!("Didn't get token for plugin!");
                 }
@@ -53,9 +52,18 @@ pub extern fn drop_service(p: *mut NaamioService) {
 }
 
 #[no_mangle]
-pub extern fn call(ptr: *mut Opaque, f: extern fn(*mut Opaque, ByteArray)) {
-    println!("Calling");
-    let s = "Hello world!";
-    f(ptr, s.into());
-    println!("Done!");
+pub extern fn register_plugin(p: *mut NaamioService,
+                              req: *mut RegisterRequest<ByteArray>,
+                              f: extern fn(ByteArray))
+{
+    let r = unsafe { &*req };
+    match (r.name.as_str(), r.rel_url.as_str(), r.endpoint.as_str()) {
+        (Some(name), Some(url), Some(endpoint)) => {
+            let service = unsafe { &*p };
+            service.register_plugin(name, url, endpoint, move |arr| {
+                f(arr);
+            })
+        },
+        _ => error!("Cannot extract string from FFI byte slices"),
+    }
 }
