@@ -4,8 +4,6 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::Error as IoError;
 
-pub type NaamioResult<T> = Result<T, NaamioError>;
-
 #[derive(Debug)]
 pub enum NaamioError {
     Io(IoError),

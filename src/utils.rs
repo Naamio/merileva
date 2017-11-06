@@ -2,7 +2,13 @@ use errors::NaamioError;
 use futures::{Future, Stream, future};
 use hyper::{Body, Error as HyperError, Headers};
 use hyper::header::{ContentLength};
+use parking_lot::RwLock;
 use types::NaamioFuture;
+
+lazy_static! {
+    pub static ref NAAMIO_ADDRESS: RwLock<String> =
+        RwLock::new(String::from("http://localhost:8000"));
+}
 
 /// Return a `Future` that acquires the accumulated request body.
 /// FIXME: Prone to DDoS attack! Restrict content length?
@@ -34,15 +40,6 @@ macro_rules! future_try {
         match $expr {
             Ok(v) => v,
             Err(e) => return Box::new(future::err(e.into()))
-        }
-    };
-}
-
-macro_rules! future_try_box {
-    ($expr:expr) => {
-        match $expr {
-            Ok(v) => v,
-            Err(e) => return Box::new(future::err(e.into())) as NaamioFuture<_>
         }
     };
 }

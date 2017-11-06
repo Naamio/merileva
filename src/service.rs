@@ -9,14 +9,10 @@ use hyper_rustls::HttpsConnector;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value as SerdeValue;
-use std::{env, mem, thread};
+use std::{mem, thread};
 use tokio_core::reactor::Core;
 use types::{EventLoopRequest, HyperClient, NaamioFuture};
-
-lazy_static! {
-    pub static ref NAAMIO_ADDRESS: String =
-        env::var("NAAMIO_ADDR").unwrap_or(String::from("http://localhost:8000"));
-}
+use utils::NAAMIO_ADDRESS;
 
 pub struct NaamioService {
     sender: FutureSender<EventLoopRequest>,
@@ -24,7 +20,7 @@ pub struct NaamioService {
 
 impl NaamioService {
     pub fn new(threads: usize) -> NaamioService {
-        info!("Setting host as {}", &*NAAMIO_ADDRESS);
+        info!("Setting host as {}", &*NAAMIO_ADDRESS.read());
         let (tx, rx) = futures_mpsc::channel(0);
         let _ = thread::spawn(move || {
             let mut core = Core::new().expect("event loop creation");
@@ -51,7 +47,7 @@ impl NaamioService {
     }
 
     fn prepare_request_for_url(method: Method, rel_url: &str) -> Request {
-        let url = format!("{}{}", &*NAAMIO_ADDRESS, rel_url);
+        let url = format!("{}{}", &*NAAMIO_ADDRESS.read(), rel_url);
         info!("{}: {}", method, url);
         Request::new(method, url.parse().unwrap())
     }

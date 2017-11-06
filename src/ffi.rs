@@ -1,10 +1,14 @@
+use chrono::offset::Utc;
+use env_logger::LogBuilder;
 use futures::{Future, future};
-use hyper::Method;
+use hyper::{Method, Uri};
 use libc::uint8_t;
+use log::{LogRecord, LogLevelFilter};
 use service::NaamioService;
 use std::sync::Arc;
 use types::{ByteArray, HyperClient};
 use types::{NaamioFuture, RegisterRequest, RegisterResponse};
+use utils::NAAMIO_ADDRESS;
 
 impl NaamioService {
     pub fn register_plugin<F>(&self, name: &str,
@@ -39,11 +43,48 @@ impl NaamioService {
     }
 }
 
+/* Exported functions */
+
+pub extern fn set_naamio_host(addr: ByteArray) {
+    match addr.as_str() {
+        Some(s) if s.parse::<Uri>().is_ok() => {
+            info!("Setting Naamio host to {}", s);
+            // Note that we can't use normal str<->String functions,
+            // because we don't own the value.
+            *NAAMIO_ADDRESS.write() = s.chars().collect::<String>();
+        },
+        _ => error!("Cannot set ")
+    }
+}
+
 #[no_mangle]
 pub extern fn create_service(threads: uint8_t) -> *mut NaamioService {
     let service = NaamioService::new(threads as usize);
     let ptr = Box::new(service);
     Box::into_raw(ptr)
+}
+
+// NOTE: This doesn't support extensive logging (module-level, for example)
+#[no_mangle]
+pub extern fn set_log_level(level: uint8_t) {
+    let mut builder = LogBuilder::new();
+    let level = match level {
+        0 => LogLevelFilter::Off,
+        1 => LogLevelFilter::Error,
+        2 => LogLevelFilter::Warn,
+        3 => LogLevelFilter::Info,
+        4 => LogLevelFilter::Debug,
+        5 => LogLevelFilter::Trace,
+        _ => return,
+    };
+
+    builder.format(|record: &LogRecord| {
+        format!("{:?}: {}: {}", Utc::now(), record.level(), record.args())
+    }).filter(None, level);
+
+    builder.init().map_err(|e| {
+        error!("Cannot initialize logger! ({})", e);
+    }).ok();
 }
 
 #[no_mangle]
