@@ -1,17 +1,17 @@
 use {serde_json, utils};
 use errors::NaamioError;
-use futures::{Future, Stream, future};
+use futures::{Future, Sink, Stream, future};
 use futures::sync::mpsc as futures_mpsc;
 use futures::sync::mpsc::Sender as FutureSender;
 use hyper::{Body, Client, Method, Request, StatusCode};
 use hyper::header::{ContentType, Headers};
 use hyper_rustls::HttpsConnector;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value as SerdeValue;
 use std::{env, mem, thread};
 use tokio_core::reactor::Core;
 use types::{EventLoopRequest, HyperClient, NaamioFuture};
-use types::{RegisterRequest, GenericResponse};
 
 lazy_static! {
     pub static ref NAAMIO_ADDRESS: String =
@@ -49,7 +49,7 @@ impl NaamioService {
         }
     }
 
-    fn prepare_request_for_url(&self, method: Method, rel_url: &str) -> Request {
+    fn prepare_request_for_url(method: Method, rel_url: &str) -> Request {
         let url = format!("{}{}", &*NAAMIO_ADDRESS, rel_url);
         info!("{}: {}", method, url);
         Request::new(method, url.parse().unwrap())
@@ -60,7 +60,7 @@ impl NaamioService {
     {
         let f = client.request(request).and_then(|mut resp| {
             let code = resp.status();
-            debug!("Got {} response", code);
+            info!("Response: {}", code);
             let hdrs = mem::replace(resp.headers_mut(), Headers::new());
             future::ok((code, hdrs, resp.body()))
         }).map_err(NaamioError::from);
@@ -69,12 +69,12 @@ impl NaamioService {
     }
 
     /// Generic request builder for all API requests.
-    fn request<T>(&self, client: &HyperClient, method: Method,
-                  rel_url: &str, data: Option<T>)
-                 -> NaamioFuture<(StatusCode, Headers, Body)>
-        where T: Serialize
+    pub fn request<S, D>(client: &HyperClient, method: Method,
+                         rel_url: &str, data: Option<S>)
+                        -> NaamioFuture<D>
+        where S: Serialize, D: DeserializeOwned + 'static
     {
-        let mut request = self.prepare_request_for_url(method, rel_url);
+        let mut request = NaamioService::prepare_request_for_url(method, rel_url);
         request.headers_mut().set(ContentType::json());
 
         if let Some(object) = data {
@@ -86,35 +86,29 @@ impl NaamioService {
             future_try!(res);
         }
 
-        NaamioService::request_with_request(client, request)
-    }
-
-    pub fn register(&self, client: &HyperClient, name: &str,
-                    rel_url: &str, endpoint: &str)
-                   -> NaamioFuture<GenericResponse>
-    {
-        let data = RegisterRequest { name, rel_url, endpoint };
-        let plugin_info = format!("plugin {} (endpoint: {}, rel_url: {})",
-                                  name, endpoint, rel_url);
-        let f = self.request(client, Method::Post, "/register", Some(data));
+        let f = NaamioService::request_with_request(client, request);
         let f = f.and_then(|(code, headers, body)| {
             utils::acquire_body_with_err(&headers, body).and_then(move |vec| {
                 if code.is_success() {
-                    info!("Successfully registered the {}", plugin_info);
-                    let res = serde_json::from_slice::<GenericResponse>(&vec)
+                    let res = serde_json::from_slice::<D>(&vec)
                                          .map_err(NaamioError::from);
                     future::result(res)
                 } else {
                     let res = serde_json::from_slice::<SerdeValue>(&vec)
                                          .map_err(NaamioError::from);
-                    let msg = format!("Error registering {}. Response: {:?}",
-                                      plugin_info, res);
+                    let msg = format!("Response: {:?}", res);
                     future::err(NaamioError::Other(msg))
                 }
             })
         });
 
         Box::new(f)
+    }
+
+    pub fn queue_closure(&self, f: EventLoopRequest) {
+        self.sender.clone().send(f).wait().map_err(|e| {
+            error!("Cannot queue request in event loop: {}", e);
+        }).ok();
     }
 }
 
