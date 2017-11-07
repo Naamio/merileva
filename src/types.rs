@@ -2,8 +2,9 @@ use errors::NaamioError;
 use futures::Future;
 use hyper::Client;
 use hyper_rustls::HttpsConnector;
-use libc::size_t;
-use std::{slice, str};
+use libc::c_char;
+use std::str;
+use std::ffi::CStr;
 
 /// HTTPS client (courtesy of rustls)
 pub type HyperClient = Client<HttpsConnector>;
@@ -30,33 +31,8 @@ pub struct RegisterResponse {
 
 /* FFI */
 
-#[repr(C)]
-/// A "borrowed" byte array (lives only as long as the owner).
-pub struct ByteArray {
-    pub bytes: *const u8,
-    pub len: size_t,
-}
-
-impl ByteArray {
-    pub fn as_str(&self) -> Option<&str> {
-        unsafe {
-            let byte_slice = slice::from_raw_parts(self.bytes, self.len as usize);
-            str::from_utf8(byte_slice).ok()
-        }
-    }
-
-    #[inline]
-    /// Try cloning into a Rust-owned `String`
-    pub fn to_owned_str(&self) -> Option<String> {
-        self.as_str().map(|s| s.chars().collect())
-    }
-}
-
-impl<'a> From<&'a str> for ByteArray {
-    fn from(s: &'a str) -> ByteArray {
-        ByteArray {
-            bytes: s.as_ptr(),
-            len: s.len() as size_t,
-        }
-    }
+/// Performs lossy conversion and clones FFI-owned string.
+pub fn clone_c_string(p: *const c_char) -> String {
+    let s = unsafe { CStr::from_ptr(p) };
+    s.to_string_lossy().into_owned()
 }
