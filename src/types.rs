@@ -2,7 +2,7 @@ use errors::NaamioError;
 use futures::Future;
 use hyper::Client;
 use hyper_rustls::HttpsConnector;
-use libc::{c_void, size_t};
+use libc::size_t;
 use std::{slice, str};
 
 /// HTTPS client (courtesy of rustls)
@@ -52,17 +52,5 @@ impl<'a> From<&'a str> for ByteArray {
             bytes: s.as_ptr(),
             len: s.len() as size_t,
         }
-    }
-}
-
-#[repr(C)]
-pub struct ForeignObject {
-    object: *mut c_void,
-    destructor: extern fn(*mut c_void),
-}
-
-impl Drop for ForeignObject {
-    fn drop(&mut self) {
-        (self.destructor)(self.object);
     }
 }

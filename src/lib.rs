@@ -1,3 +1,4 @@
+#![feature(unique)]
 extern crate chrono;
 extern crate env_logger;
 extern crate futures;

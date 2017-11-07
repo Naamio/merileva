@@ -2,10 +2,11 @@ use chrono::offset::Utc;
 use env_logger::LogBuilder;
 use futures::{Future, future};
 use hyper::{Method, Uri};
-use libc::uint8_t;
+use libc::{c_void, uint8_t};
 use log::{LogRecord, LogLevelFilter};
 use service::NaamioService;
 use std::sync::Arc;
+use std::ptr::Unique;
 use types::{ByteArray, HyperClient};
 use types::{NaamioFuture, RegisterRequest, RegisterResponse};
 use utils::NAAMIO_ADDRESS;
@@ -52,7 +53,8 @@ pub extern fn set_naamio_host(addr: ByteArray) {
             info!("Setting Naamio host to {}", s);
             // Note that we can't use normal str<->String functions,
             // because we don't own the value.
-            *NAAMIO_ADDRESS.write() = s.chars().collect::<String>();
+            *NAAMIO_ADDRESS.write() = s.trim_right_matches('/')
+                                       .chars().collect::<String>();
         },
         _ => error!("Cannot set Naamio host (Invalid data)"),
     }
@@ -94,16 +96,20 @@ pub extern fn drop_service(p: *mut NaamioService) {
 }
 
 #[no_mangle]
-pub extern fn register_plugin(p: *mut NaamioService,
+pub extern fn register_plugin(swift_internal: *mut c_void,
+                              p: *mut NaamioService,
                               req: *mut RegisterRequest<ByteArray>,
-                              f: extern fn(ByteArray))
+                              f: extern fn(*mut c_void, ByteArray))
 {
-    let r = unsafe { &*req };
+    let (u, r) = unsafe {
+        (Unique::new_unchecked(swift_internal), &*req)
+    };
+
     match (r.name.as_str(), r.rel_url.as_str(), r.endpoint.as_str()) {
         (Some(name), Some(url), Some(endpoint)) => {
             let service = unsafe { &*p };
             service.register_plugin(name, url, endpoint, move |arr| {
-                f(arr);
+                f(u.as_ptr(), arr);
             })
         },
         _ => error!("Cannot extract string from FFI byte slices"),
