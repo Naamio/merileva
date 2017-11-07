@@ -3,7 +3,7 @@ use errors::NaamioError;
 use futures::{Future, Sink, Stream, future};
 use futures::sync::mpsc as futures_mpsc;
 use futures::sync::mpsc::Sender as FutureSender;
-use hyper::{Body, Client, Method, Request, StatusCode};
+use hyper::{Body, Client, Method, Request, StatusCode, Uri};
 use hyper::header::{ContentLength, ContentType, Headers};
 use hyper_rustls::HttpsConnector;
 use serde::Serialize;
@@ -46,10 +46,10 @@ impl NaamioService {
         }
     }
 
-    fn prepare_request_for_url(method: Method, rel_url: &str) -> Request {
-        let url = format!("{}{}", &*NAAMIO_ADDRESS.read(), rel_url);
-        info!("{}: {}", method, url);
-        Request::new(method, url.parse().unwrap())
+    #[inline]
+    fn prepare_request_for_url(method: Method, uri: Uri) -> Request {
+        info!("{}: {}", method, uri);
+        Request::new(method, uri)
     }
 
     fn request_with_request(client: &HyperClient, request: Request)
@@ -67,11 +67,11 @@ impl NaamioService {
 
     /// Generic request builder for all API requests.
     pub fn request<S, D>(client: &HyperClient, method: Method,
-                         rel_url: &str, data: Option<S>)
+                         url: Uri, data: Option<S>)
                         -> NaamioFuture<D>
         where S: Serialize, D: DeserializeOwned + 'static
     {
-        let mut request = NaamioService::prepare_request_for_url(method, rel_url);
+        let mut request = Self::prepare_request_for_url(method, url);
         request.headers_mut().set(ContentType::json());
 
         if let Some(object) = data {

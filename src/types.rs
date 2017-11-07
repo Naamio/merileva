@@ -44,6 +44,12 @@ impl ByteArray {
             str::from_utf8(byte_slice).ok()
         }
     }
+
+    #[inline]
+    /// Try cloning into a Rust-owned `String`
+    pub fn to_owned_str(&self) -> Option<String> {
+        self.as_str().map(|s| s.chars().collect())
+    }
 }
 
 impl<'a> From<&'a str> for ByteArray {

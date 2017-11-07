@@ -1,14 +1,18 @@
 use hyper::Error as HyperError;
+use hyper::error::UriError;
 use serde_json::error::Error as SerdeError;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::io::Error as IoError;
+
+pub type NaamioResult<T> = Result<T, NaamioError>;
 
 #[derive(Debug)]
 pub enum NaamioError {
     Io(IoError),
     Hyper(HyperError),
     Serde(SerdeError),
+    Uri(UriError),
     Other(String),
 }
 
@@ -18,6 +22,7 @@ impl Display for NaamioError {
             NaamioError::Io(ref e)      => write!(f, "I/O error: {}", e),
             NaamioError::Hyper(ref e)   => write!(f, "Hyper error: {}", e),
             NaamioError::Serde(ref e)   => write!(f, "Serde error: {}", e),
+            NaamioError::Uri(ref e)     => write!(f, "URI error: {}", e),
             NaamioError::Other(ref e)   => write!(f, "Unknown error: {}", e),
         }
     }
@@ -33,6 +38,7 @@ impl Error for NaamioError {
             NaamioError::Io(ref e)      => Some(e),
             NaamioError::Hyper(ref e)   => Some(e),
             NaamioError::Serde(ref e)   => Some(e),
+            NaamioError::Uri(ref e)     => Some(e),
             _ => None,
         }
     }
@@ -51,3 +57,4 @@ macro_rules! impl_error {
 impl_error!(IoError => Io);
 impl_error!(HyperError => Hyper);
 impl_error!(SerdeError => Serde);
+impl_error!(UriError => Uri);

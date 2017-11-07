@@ -1,39 +1,39 @@
 use chrono::offset::Utc;
 use env_logger::LogBuilder;
 use futures::{Future, future};
-use hyper::{Method, Uri};
+use hyper::Method;
 use libc::{c_void, uint8_t};
 use log::{LogRecord, LogLevelFilter};
+use serde::de::DeserializeOwned;
+use serde_json::Value as SerdeValue;
 use service::NaamioService;
 use std::sync::Arc;
 use std::ptr::Unique;
 use types::{ByteArray, HyperClient};
 use types::{NaamioFuture, RegisterRequest, RegisterResponse};
-use utils::NAAMIO_ADDRESS;
+use utils::{NAAMIO_ADDRESS, Url};
 
 impl NaamioService {
-    pub fn register_plugin<F>(&self, name: &str,
-                              rel_url: &str, endpoint: &str,
-                              call: F)
-        where F: Fn(ByteArray) + Send + Sync + 'static
+    pub fn register_plugin<F, D>(&self, name: &str,
+                                 rel_url: &str, endpoint: &str,
+                                 host: Option<String>, call: F)
+        where F: Fn(D) + Send + Sync + 'static,
+              D: DeserializeOwned + 'static
     {
         let data = json!(RegisterRequest { name, rel_url, endpoint });
-        info!("Incoming plugin: {} (endpoint: {}, rel_url: {})", name, endpoint, rel_url);
+        info!("Registering plugin: {} (endpoint: {}, rel_url: {})",
+              name, endpoint, rel_url);
         let callback = Arc::new(call);
 
         let closure = Box::new(move |client: &HyperClient| {
             let callback = callback.clone();
-            let f = Self::request::<_, RegisterResponse>(client,
-                                                         Method::Post,
-                                                         "/register",
-                                                         Some(data.clone()));
+            let url = future_try_box!(host.clone()
+                                          .map(|s| Url::absolute(s.as_str()))
+                                          .unwrap_or(Url::relative("/register")));
+            let f = Self::request::<_, D>(client, Method::Post,
+                                          url, Some(data.clone()));
             let f = f.and_then(move |resp| {
-                if let Some(s) = resp.token.as_ref() {
-                    (&callback)(s.as_str().into());
-                } else {
-                    error!("Didn't get token for plugin!");
-                }
-
+                (&callback)(resp);
                 future::ok::<(), _>(())
             });
 
@@ -48,13 +48,12 @@ impl NaamioService {
 
 #[no_mangle]
 pub extern fn set_naamio_host(addr: ByteArray) {
-    match addr.as_str() {
-        Some(s) if s.parse::<Uri>().is_ok() => {
+    match addr.to_owned_str() {
+        Some(ref s) if Url::absolute(&s).is_ok() => {
             info!("Setting Naamio host to {}", s);
-            // Note that we can't use normal str<->String functions,
+            // Note that we can't use normal `String::from` or `to_owned`
             // because we don't own the value.
-            *NAAMIO_ADDRESS.write() = s.trim_right_matches('/')
-                                       .chars().collect::<String>();
+            *NAAMIO_ADDRESS.write() = s.trim_right_matches('/').to_owned();
         },
         _ => error!("Cannot set Naamio host (Invalid data)"),
     }
@@ -108,10 +107,45 @@ pub extern fn register_plugin(swift_internal: *mut c_void,
     match (r.name.as_str(), r.rel_url.as_str(), r.endpoint.as_str()) {
         (Some(name), Some(url), Some(endpoint)) => {
             let service = unsafe { &*p };
-            service.register_plugin(name, url, endpoint, move |arr| {
-                f(u.as_ptr(), arr);
+            service.register_plugin(name, url,
+                                    endpoint, None,
+                                    move |resp: RegisterResponse| {
+                if let Some(t) = resp.token.as_ref() {
+                    f(u.as_ptr(), t.as_str().into());
+                } else {
+                    error!("[plugin reg] Didn't get token for plugin");
+                }
             })
         },
-        _ => error!("Cannot extract string from FFI byte slices"),
+        _ => error!("[plugin reg] Cannot extract strings from FFI byte slices"),
+    }
+}
+
+#[no_mangle]
+pub extern fn register_plugin_with_host(swift_internal: *mut c_void,
+                                        p: *mut NaamioService,
+                                        host: ByteArray,
+                                        req: *mut RegisterRequest<ByteArray>,
+                                        f: extern fn(*mut c_void))
+{
+    let (u, r) = unsafe {
+        (Unique::new_unchecked(swift_internal), &*req)
+    };
+
+    let host = match host.to_owned_str() {
+        Some(s) => s,
+        None => return,
+    };
+
+    match (r.name.as_str(), r.rel_url.as_str(), r.endpoint.as_str()) {
+        (Some(name), Some(url), Some(endpoint)) => {
+            let service = unsafe { &*p };
+            service.register_plugin(name, url,
+                                    endpoint, Some(host),
+                                    move |_: SerdeValue| {
+                f(u.as_ptr());
+            })
+        },
+        _ => error!("[subplugin reg] Cannot extract string from FFI byte slices"),
     }
 }
