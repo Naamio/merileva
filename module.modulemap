@@ -1,0 +1,5 @@
+module Merileva [system] {
+    header "merileva.h"
+    link "merileva"
+    export *
+}

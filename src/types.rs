@@ -31,6 +31,8 @@ pub struct RegisterResponse {
 
 /* FFI */
 
+pub type CStrPtr = *const c_char;
+
 /// Performs lossy conversion and clones FFI-owned string.
 pub fn clone_c_string(p: *const c_char) -> String {
     let s = unsafe { CStr::from_ptr(p) };

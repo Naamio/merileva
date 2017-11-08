@@ -2,7 +2,7 @@ use chrono::offset::Utc;
 use env_logger::LogBuilder;
 use futures::{Future, future};
 use hyper::Method;
-use libc::{c_char, c_void, uint8_t};
+use libc::{c_void, uint8_t};
 use log::{LogRecord, LogLevelFilter};
 use serde::de::DeserializeOwned;
 use serde_json::Value as SerdeValue;
@@ -10,7 +10,7 @@ use service::NaamioService;
 use std::ffi::CString;
 use std::sync::Arc;
 use std::ptr::Unique;
-use types::{self, HyperClient};
+use types::{self, CStrPtr, HyperClient};
 use types::{NaamioFuture, RegisterRequest, RegisterResponse};
 use utils::{NAAMIO_ADDRESS, Url};
 
@@ -22,19 +22,17 @@ impl NaamioService {
     {
         info!("Registering plugin: {} (endpoint: {}, rel_url: {})",
               &req.name, &req.endpoint, &req.rel_url);
-        let callback = Arc::new(call);
 
+        let callback = Arc::new(call);
         let closure = Box::new(move |client: &HyperClient| {
-            let data = json!(&req);
             let callback = callback.clone();
-            let url = future_try_box!(host.clone()
+            let url = future_try_box!(host.as_ref()
                                           .map(|s| Url::absolute(s.as_str()))
                                           .unwrap_or(Url::relative("/register")));
-            let f = Self::request::<_, D>(client, Method::Post,
-                                          url, Some(data));
+            let f = Self::request(client, Method::Post, url, Some(&req));
             let f = f.and_then(move |resp| {
                 (&callback)(resp);
-                future::ok::<(), _>(())
+                future::ok(())
             });
 
             Box::new(f) as NaamioFuture<()>
@@ -47,7 +45,7 @@ impl NaamioService {
 /* Exported functions */
 
 #[no_mangle]
-pub extern fn set_naamio_host(addr: *const c_char) {
+pub extern fn set_naamio_host(addr: CStrPtr) {
     let addr = types::clone_c_string(addr);
     match Url::absolute(&addr) {
         Ok(_) => *NAAMIO_ADDRESS.write() = addr.trim_right_matches('/').to_owned(),
@@ -62,7 +60,7 @@ pub extern fn create_service(threads: uint8_t) -> *mut NaamioService {
     Box::into_raw(ptr)
 }
 
-// NOTE: This doesn't support extensive logging (module-level, for example)
+// NOTE: This doesn't support all logging features (module-level filter, for example)
 #[no_mangle]
 pub extern fn set_log_level(level: uint8_t) {
     let mut builder = LogBuilder::new();
@@ -93,8 +91,8 @@ pub extern fn drop_service(p: *mut NaamioService) {
 #[no_mangle]
 pub extern fn register_plugin(swift_internal: *mut c_void,
                               p: *mut NaamioService,
-                              req: *mut RegisterRequest<*const c_char>,
-                              f: extern fn(*mut c_void, *const c_char))
+                              req: *mut RegisterRequest<CStrPtr>,
+                              f: extern fn(*mut c_void, CStrPtr))
 {
     let (u, r) = unsafe {
         (Unique::new_unchecked(swift_internal), &*req)
@@ -120,8 +118,8 @@ pub extern fn register_plugin(swift_internal: *mut c_void,
 #[no_mangle]
 pub extern fn register_plugin_with_host(swift_internal: *mut c_void,
                                         p: *mut NaamioService,
-                                        host: *const c_char,
-                                        req: *mut RegisterRequest<*const c_char>,
+                                        host: CStrPtr,
+                                        req: *mut RegisterRequest<CStrPtr>,
                                         f: extern fn(*mut c_void))
 {
     let host = types::clone_c_string(host);
