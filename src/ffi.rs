@@ -1,57 +1,16 @@
 use chrono::offset::Utc;
 use env_logger::LogBuilder;
-use futures::{Future, future};
-use hyper::Method;
+use hyper::{Method, Request};
+use hyper::header::{Authorization, Bearer};
 use libc::{c_void, uint8_t};
 use log::{LogRecord, LogLevelFilter};
-use serde::de::DeserializeOwned;
-use serde_json::Value as SerdeValue;
 use service::NaamioService;
 use std::ffi::CString;
-use std::sync::Arc;
 use std::ptr::Unique;
-use types::{self, CStrPtr, HyperClient};
-use types::{NaamioFuture, RegisterRequest, RegisterResponse};
-use utils::{NAAMIO_ADDRESS, Url};
-
-impl NaamioService {
-    pub fn register_plugin<F, D>(&self, req: RegisterRequest<String>,
-                                 host: Option<String>, call: F)
-        where F: Fn(D) + Send + Sync + 'static,
-              D: DeserializeOwned + 'static
-    {
-        info!("Registering plugin: {} (endpoint: {}, rel_url: {})",
-              &req.name, &req.endpoint, &req.rel_url);
-
-        let callback = Arc::new(call);
-        let closure = Box::new(move |client: &HyperClient| {
-            let callback = callback.clone();
-            let url = future_try_box!(host.as_ref()
-                                          .map(|s| Url::absolute(s.as_str()))
-                                          .unwrap_or(Url::relative("/register")));
-            let f = Self::request(client, Method::Post, url, Some(&req));
-            let f = f.and_then(move |resp| {
-                (&callback)(resp);
-                future::ok(())
-            });
-
-            Box::new(f) as NaamioFuture<()>
-        });
-
-        self.queue_closure(closure);
-    }
-}
+use types::{self, CStrPtr, RegistrationData};
+use types::{RequestRequirements, RegistrationResponse};
 
 /* Exported functions */
-
-#[no_mangle]
-pub extern fn set_naamio_host(addr: CStrPtr) {
-    let addr = types::clone_c_string(addr);
-    match Url::absolute(&addr) {
-        Ok(_) => *NAAMIO_ADDRESS.write() = addr.trim_right_matches('/').to_owned(),
-        Err(e) => error!("Cannot set Naamio host ({})", e),
-    }
-}
 
 #[no_mangle]
 pub extern fn create_service(threads: uint8_t) -> *mut NaamioService {
@@ -91,50 +50,38 @@ pub extern fn drop_service(p: *mut NaamioService) {
 #[no_mangle]
 pub extern fn register_plugin(swift_internal: *mut c_void,
                               p: *mut NaamioService,
-                              req: *mut RegisterRequest<CStrPtr>,
+                              req: *mut RequestRequirements<CStrPtr>,
+                              data: *mut RegistrationData<CStrPtr>,
                               f: extern fn(*mut c_void, CStrPtr))
 {
-    let (u, r) = unsafe {
-        (Unique::new_unchecked(swift_internal), &*req)
+    let (u, r, d) = unsafe {
+        (Unique::new_unchecked(swift_internal), &*req, &*data)
     };
 
-    let r = RegisterRequest {
-        name: types::clone_c_string(r.name),
-        rel_url: types::clone_c_string(r.rel_url),
-        endpoint: types::clone_c_string(r.endpoint),
-    };
+    let d: RegistrationData<String> = d.into();
+    info!("Registering plugin: {} (endpoint: {}, rel_url: {})",
+          &d.name, &d.endpoint, &d.rel_url);
 
     let service = unsafe { &*p };
-    service.register_plugin(r, None, move |resp: RegisterResponse| {
+    let closure = move |resp: RegistrationResponse| {
         if let Some(ref t) = resp.token {
             let string = CString::new(t.as_str()).unwrap();
             f(u.as_ptr(), string.as_ptr());
         } else {
-            error!("[plugin reg] Didn't get token for plugin");
+            error!("Didn't get token for plugin");
         }
-    })
-}
-
-#[no_mangle]
-pub extern fn register_plugin_with_host(swift_internal: *mut c_void,
-                                        p: *mut NaamioService,
-                                        host: CStrPtr,
-                                        req: *mut RegisterRequest<CStrPtr>,
-                                        f: extern fn(*mut c_void))
-{
-    let host = types::clone_c_string(host);
-    let (u, r) = unsafe {
-        (Unique::new_unchecked(swift_internal), &*req)
     };
 
-    let r = RegisterRequest {
-        name: types::clone_c_string(r.name),
-        rel_url: types::clone_c_string(r.rel_url),
-        endpoint: types::clone_c_string(r.endpoint),
+    let url = types::clone_c_string(r.url);
+    let token = types::clone_c_string(r.token);
+    let modifier = move |req: &mut Request| {
+        req.headers_mut().set(Authorization(Bearer {
+            token: token.clone(),
+        }));
     };
 
-    let service = unsafe { &*p };
-    service.register_plugin(r, Some(host), move |_: SerdeValue| {
-        f(u.as_ptr());
-    })
+    if let Err(e) = service.queue_request(Method::Post, &url,
+                                          Some(d), Some(modifier), closure) {
+        error!("Cannot register plugin: {}", e);
+    }
 }

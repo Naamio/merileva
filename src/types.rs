@@ -18,14 +18,30 @@ pub type EventLoopRequest = Box<Fn(&HyperClient) -> NaamioFuture<()> + Send + 's
 
 #[repr(C)]
 #[derive(Serialize)]
-pub struct RegisterRequest<Str> {
+pub struct RegistrationData<Str> {
     pub name: Str,
     pub rel_url: Str,
     pub endpoint: Str,
 }
 
+impl<'a> From<&'a RegistrationData<CStrPtr>> for RegistrationData<String> {
+    fn from(r: &'a RegistrationData<CStrPtr>) -> RegistrationData<String> {
+        RegistrationData {
+            name: clone_c_string(r.name),
+            rel_url: clone_c_string(r.rel_url),
+            endpoint: clone_c_string(r.endpoint),
+        }
+    }
+}
+
+#[repr(C)]
+pub struct RequestRequirements<Str> {
+    pub url: Str,
+    pub token: Str,
+}
+
 #[derive(Deserialize)]
-pub struct RegisterResponse {
+pub struct RegistrationResponse {
     pub token: Option<String>,
 }
 

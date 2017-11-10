@@ -2,27 +2,11 @@ use errors::{NaamioError, NaamioResult};
 use futures::{Future, Stream, future};
 use hyper::{Body, Error as HyperError, Headers, Uri};
 use hyper::header::{ContentLength};
-use parking_lot::RwLock;
 use types::NaamioFuture;
 
-lazy_static! {
-    pub static ref NAAMIO_ADDRESS: RwLock<String> =
-        RwLock::new(String::from("http://localhost:8000"));
-}
-
-pub struct Url;
-
-impl Url {
-    pub fn relative(rel_url: &str) -> NaamioResult<Uri> {
-        let mut url = NAAMIO_ADDRESS.read().clone();
-        url.push_str(rel_url);
-        Self::absolute(&url)
-    }
-
-    #[inline]
-    pub fn absolute(url: &str) -> NaamioResult<Uri> {
-        Ok(url.parse()?)
-    }
+#[inline]
+pub fn parse_url(url: &str) -> NaamioResult<Uri> {
+    Ok(url.parse()?)
 }
 
 /// Return a `Future` that acquires the accumulated request body.
