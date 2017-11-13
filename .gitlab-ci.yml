@@ -12,9 +12,9 @@ stages:
   - build
   - test
   - release
-
+  
 build-app:
-  image: omnijarstudio/rust:linux-musl
+  image: rust:1.21
   stage: build
   script:
     - echo "Building release artifact for calabazilla"
@@ -33,7 +33,7 @@ build-app:
     - release
 
 review-app:
-  image: omnijarstudio/rust:linux-musl
+  image: rust:1.21
   stage: test
   script:
     - echo "Reviewing merileva library"
@@ -46,7 +46,7 @@ review-app:
     - master
 
 test-app:
-  image: omnijarstudio/rust:linux-musl
+  image: rust:1.21
   stage: test
   script:
     - echo "Testing merileva library"
